@@ -6,3 +6,4 @@ node_modules/
 /files_100
 /files_pdfs
 .claude/
+*.xls
