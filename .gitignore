@@ -1,0 +1,8 @@
+.env
+.venv/
+__pycache__/
+node_modules/
+*.pdf
+/files_100
+/files_pdfs
+.claude/
