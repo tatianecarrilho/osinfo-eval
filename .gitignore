@@ -3,7 +3,16 @@
 __pycache__/
 node_modules/
 *.pdf
+/files
+/files_10
 /files_100
+/files_100_2
 /files_pdfs
 .claude/
+/results
 *.xls
+*.xlsx
+rj-nf-agent-tati.json
+*-credentials.json
+*.json
+Pipfile

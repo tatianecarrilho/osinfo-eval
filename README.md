@@ -2,6 +2,27 @@
 
 Este projeto utiliza o Google Gemini para extrair informações de notas fiscais de arquivos PDF.
 
+## 🎯 Dois Modos de Uso
+
+### 1. 🌐 Interface Web (Análise Individual)
+Interface interativa com Streamlit para análise de PDFs individuais.
+- Upload de um PDF por vez
+- Visualização em tempo real dos resultados
+- Ideal para análises pontuais e exploratórias
+
+📖 **[Leia a documentação completa da aplicação web](APP_README.md)**
+
+**Como executar:**
+```bash
+streamlit run app.py
+```
+
+### 2. 📦 Script em Lote (Processamento em Massa)
+Script de linha de comando para processar múltiplos PDFs de uma vez.
+- Processa todos os PDFs de uma pasta
+- Gera arquivo Excel consolidado
+- Ideal para processamento em massa
+
 ## Informações Extraídas
 
 Para cada nota fiscal encontrada nos PDFs, o sistema extrai:
@@ -54,7 +75,7 @@ GEMINI_TEMPERATURE=0.1
 
 ## Como Usar
 
-1. Coloque todos os arquivos PDF na pasta `files_pdfs/`
+1. Coloque todos os arquivos PDF na pasta configurada (padrão: `files/files_100_2/`)
 
 2. Execute o script:
 ```bash
@@ -66,20 +87,105 @@ python extrair_notas_fiscais.py
    - Extrair informações de todas as notas fiscais encontradas
    - Gerar uma planilha Excel com os resultados
 
-4. O arquivo Excel será gerado no mesmo diretório com o nome:
+4. O arquivo Excel será gerado na pasta `results/` com o nome:
    `resultado_notas_fiscais_AAAAMMDD_HHMMSS.xlsx`
 
 ## Estrutura do Projeto
 
 ```
 .
-├── extrair_notas_fiscais.py  # Script principal
+├── app.py                     # 🌐 Aplicação web Streamlit (análise individual)
+├── extrair_notas_fiscais.py  # 📦 Script em lote (processamento em massa)
+├── config.py                  # Arquivo de configuração
 ├── requirements.txt           # Dependências Python
 ├── .env.example              # Exemplo de configuração
 ├── .env                      # Suas configurações (não versionar)
-├── files_pdfs/               # Pasta com os PDFs a processar
-└── README.md                 # Este arquivo
+├── APP_README.md             # Documentação da aplicação web
+├── README.md                 # Este arquivo
+├── files/                    # Pasta com subpastas de PDFs
+│   ├── files_10/            # PDFs para teste (10 arquivos)
+│   ├── files_100/           # PDFs conjunto 1 (100 arquivos)
+│   ├── files_100_2/         # PDFs conjunto 2 (100 arquivos) - PADRÃO
+│   └── files_pdfs/          # PDFs diversos
+└── results/                  # Pasta onde são salvos os arquivos Excel
 ```
+
+## Configuração
+
+O projeto separa configurações em dois arquivos seguindo melhores práticas de segurança:
+
+### 1. Arquivo `.env` - Credenciais (NUNCA versionar)
+
+Contém **apenas informações sensíveis**:
+- `GEMINI_API_KEY` - Chave da API do Gemini (OBRIGATÓRIO)
+- `BIGQUERY_CREDENTIALS_PATH` - Caminho do arquivo de credenciais (OBRIGATÓRIO se BigQuery habilitado)
+
+**Configuração mínima do `.env`:**
+```bash
+GEMINI_API_KEY=sua_chave_api_aqui
+BIGQUERY_CREDENTIALS_PATH=rj-nf-agent-tati.json
+```
+
+**Opcionalmente**, você pode sobrescrever valores do `config.py` no `.env`:
+```bash
+# Sobrescrever configurações (opcional)
+GEMINI_MODEL=gemini-1.5-pro
+GEMINI_TEMPERATURE=0.2
+BIGQUERY_ENABLED=false
+```
+
+### 2. Arquivo `config.py` - Configurações do Projeto (versionado)
+
+O arquivo [`config.py`](config.py) contém todas as configurações do projeto:
+
+#### 📁 Pastas
+```python
+PASTA_PDFS = "files/files_100_2"  # Onde estão os PDFs
+PASTA_RESULTADOS = "results"       # Onde salvar os resultados
+```
+
+#### 🤖 Google Gemini
+```python
+GEMINI_MODEL = "gemini-1.5-flash"      # Modelo (flash/pro)
+GEMINI_TEMPERATURE = 0.1                # Criatividade (0.0-1.0)
+GEMINI_TOP_P = 0.95                     # Amostragem nucleus
+GEMINI_TOP_K = 64                       # Top-k
+GEMINI_MAX_OUTPUT_TOKENS = 8192         # Tokens máximos
+```
+
+#### 📊 BigQuery
+```python
+BIGQUERY_ENABLED = True                 # Habilitar/desabilitar
+BIGQUERY_PROJECT_ID = "rj-nf-agent"    # ID do projeto
+BIGQUERY_DATASET = "poc_osinfo_ia"     # Dataset
+BIGQUERY_TABLE = "despesas_recorte"    # Tabela/View
+```
+
+#### ⚙️ Processamento
+```python
+LIMITE_TAMANHO_PDF_MB = 100            # Tamanho máximo PDF
+TIMEOUT_API_SEGUNDOS = 120             # Timeout API Gemini
+```
+
+#### ✅ Validação
+```python
+TOLERANCIA_COMPARACAO_VALORES = 0.01   # Tolerância valores
+TIPOS_DOCUMENTOS_VALIDOS = [...]       # Tipos aceitos
+```
+
+### Hierarquia de Configuração
+
+📌 **Regra simples:**
+- **Credenciais** → Sempre no `.env` (obrigatório)
+- **Configurações do projeto** → No `config.py` (pode ser sobrescrito pelo `.env`)
+
+**Ordem de prioridade:**
+1. **.env** - Maior prioridade (se a variável existir)
+2. **config.py** - Valor padrão (se não houver no .env)
+
+**Como usar:**
+- **Alterar pasta de PDFs, modelo do Gemini, etc.** → Edite [`config.py`](config.py)
+- **Adicionar credenciais, sobrescrever valores pontualmente** → Edite `.env`
 
 ## Observações
 
@@ -100,30 +206,31 @@ Você pode ajustar as configurações do modelo no arquivo `.env`:
 
 ## Integração com BigQuery (Opcional)
 
-O script pode consultar o BigQuery para enriquecer os dados extraídos com informações adicionais.
+O script pode consultar o BigQuery para enriquecer os dados extraídos com informações adicionais e realizar validações automáticas.
 
 ### Como Funciona
 
 Para cada PDF processado, o script:
 1. Extrai informações usando o Gemini
-2. Consulta a tabela `despesas` no BigQuery usando o nome do arquivo
-3. Adiciona à planilha Excel: `num_documento`, `valor_documento`, `valor_pago_total`
+2. Consulta a tabela de despesas no BigQuery usando o nome do arquivo
+3. Adiciona dados do BigQuery: `num_documento`, `valor_documento`, `valor_pago_total`
+4. Realiza validações automáticas comparando dados extraídos com dados do BigQuery
+5. Classifica o documento como "Descartado", "Suspeito" ou "Não foi possível analisar"
 
 ### Configuração
 
-1. **Crie uma Service Account no Google Cloud**:
-   - Acesse o [Console GCP](https://console.cloud.google.com/)
-   - Vá em "IAM & Admin" > "Service Accounts"
-   - Crie uma service account com permissão de leitura no BigQuery
-   - Baixe o arquivo JSON de credenciais
+1. **Coloque o arquivo de credenciais na raiz do projeto**:
+   - Obtenha o arquivo JSON de service account com permissão de leitura no BigQuery
+   - Salve o arquivo como `rj-nf-agent-tati.json` na raiz do projeto
+   - O arquivo já está configurado no `.gitignore` para não ser versionado
 
-2. **Configure o arquivo `.env`**:
+2. **Configure o arquivo `.env`** (opcional - o código já tem valores padrão):
 ```bash
 BIGQUERY_ENABLED=true
-BIGQUERY_PROJECT_ID=rj-cvl
-BIGQUERY_DATASET=adm_contrato_gestao
-BIGQUERY_TABLE=despesas
-GOOGLE_APPLICATION_CREDENTIALS=/caminho/para/service-account.json
+BIGQUERY_PROJECT_ID=rj-nf-agent
+BIGQUERY_DATASET=poc_osinfo_ia
+BIGQUERY_TABLE=despesas_recorte
+BIGQUERY_CREDENTIALS_PATH=rj-nf-agent-tati.json
 ```
 
 3. **Instale as dependências do BigQuery**:
@@ -131,15 +238,35 @@ GOOGLE_APPLICATION_CREDENTIALS=/caminho/para/service-account.json
 pip install google-cloud-bigquery db-dtypes
 ```
 
+### Validações Automáticas
+
+O sistema realiza as seguintes validações:
+
+1. **PDF possui NF em Despesas?**: Verifica se o número da NF extraído do PDF existe no BigQuery
+2. **Valor Pago ≤ Valor Declarado?**: Verifica se o valor pago é menor ou igual ao valor do documento
+3. **Valor NF == Valor Declarado?**: Verifica se o valor extraído do PDF é igual ao valor no BigQuery (tolerância de R$ 0,01)
+
+### Classificação Final
+
+Baseado nas validações, cada documento recebe uma classificação:
+
+- **Descartado**: Todas as validações retornaram "SIM" - documento está OK
+- **Suspeito**: Pelo menos uma validação retornou "NÃO" - requer revisão manual
+- **Não foi possível analisar**: Documento não contém NF válida ou houve erro no processamento
+
 ### Colunas Adicionadas na Planilha
 
 Quando o BigQuery está habilitado, as seguintes colunas são adicionadas:
 
 - **Num Documento (BQ)**: Número do documento no BigQuery
-- **Valor Documento (BQ)**: Valor do documento registrado no BigQuery
-- **Valor Pago Total (BQ)**: Soma dos valores pagos
+- **Valor Documento (BQ)**: Valor do documento registrado no BigQuery (R$)
+- **Valor Pago Total (BQ)**: Soma dos valores pagos (R$)
+- **PDF possui NF em Despesas?**: SIM/NÃO/N/A
+- **Valor Pago ≤ Valor Declarado?**: SIM/NÃO/N/A
+- **Valor NF == Valor Declarado?**: SIM/NÃO/N/A
+- **Classificação Final**: Descartado/Suspeito/Não foi possível analisar
 
-Se o arquivo não for encontrado no BigQuery, essas colunas mostrarão "N/A".
+Se o arquivo não for encontrado no BigQuery, as colunas mostrarão "N/A" e a classificação será "Suspeito".
 
 ## Solução de Problemas
 
