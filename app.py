@@ -395,97 +395,87 @@ def main():
         st.error("❌ GEMINI_API_KEY não encontrada. Configure o arquivo .env")
         st.stop()
 
+    # Inicializa estados da sessão
+    if 'analise_concluida' not in st.session_state:
+        st.session_state.analise_concluida = False
+    if 'resultados' not in st.session_state:
+        st.session_state.resultados = None
+    if 'pdf_bytes' not in st.session_state:
+        st.session_state.pdf_bytes = None
+    if 'nome_arquivo' not in st.session_state:
+        st.session_state.nome_arquivo = None
+    if 'num_paginas' not in st.session_state:
+        st.session_state.num_paginas = 0
 
-    # Upload do arquivo
-    uploaded_file = st.file_uploader(
-        "📎 Faça upload de uma Prestação de Contas para validar as Notas Fiscais",
-        type=['pdf'],
-        help=f"Tamanho máximo: {LIMITE_TAMANHO_PDF_MB} MB"
-    )
+    # Botão Nova Análise (só aparece após análise concluída)
+    if st.session_state.analise_concluida:
+        if st.button("🔄 Nova Análise", type="secondary"):
+            st.session_state.analise_concluida = False
+            st.session_state.resultados = None
+            st.session_state.pdf_bytes = None
+            st.session_state.nome_arquivo = None
+            st.session_state.num_paginas = 0
+            st.rerun()
 
-    if uploaded_file is not None:
-        # Lê o PDF
-        pdf_bytes = uploaded_file.read()
-        tamanho_mb = len(pdf_bytes) / (1024 * 1024)
-        num_paginas = contar_paginas_pdf(pdf_bytes)
+    # Se análise não foi concluída, mostra upload e botão de análise
+    if not st.session_state.analise_concluida:
+        # Upload do arquivo
+        uploaded_file = st.file_uploader(
+            "📎 Faça upload de uma Prestação de Contas para validar as Notas Fiscais",
+            type=['pdf'],
+            help=f"Tamanho máximo: {LIMITE_TAMANHO_PDF_MB} MB"
+        )
 
-        # Cria layout de duas colunas desde o início
-        col_esquerda, col_direita = st.columns([1, 1])
+        if uploaded_file is not None:
+            # Lê o PDF
+            pdf_bytes = uploaded_file.read()
+            tamanho_mb = len(pdf_bytes) / (1024 * 1024)
+            num_paginas = contar_paginas_pdf(pdf_bytes)
 
-        with col_esquerda:
-            st.header("📄 Visualização")
-
-            # Visualiza o PDF usando iframe
-            pdf_base64 = base64.b64encode(pdf_bytes).decode('utf-8')
-            pdf_display = f'<iframe src="data:application/pdf;base64,{pdf_base64}" width="100%" height="800" type="application/pdf"></iframe>'
-            st.markdown(pdf_display, unsafe_allow_html=True)
-
-        with col_direita:
-            st.header("🤖 Análise IA")
-
-            # Informações do arquivo
-            st.markdown(f"""
-                <table style="width:100%; border-collapse: collapse; border:none; margin-top: 12px;">
-                    <tr>
-                        <td><strong>Nome do Arquivo</strong><br>{uploaded_file.name}</td>
-                        <td><strong>Tamanho</strong><br>{tamanho_mb:.2f}</td>
-                        <td><strong>Número de Páginas</strong><br>{num_paginas}</td>
-                    </tr>
-                </table>
-            """, unsafe_allow_html=True)
-
-            # Botão de processar na coluna direita
+            # Botão de processar
             processar = st.button("🚀 Analisar PDF", type="primary", use_container_width=False)
 
             if processar:
                 # Cria barra de progresso e status
-                with col_direita:
-                    progress_bar = st.progress(0)
-                    status_text = st.empty()
+                progress_bar = st.progress(0)
+                status_text = st.empty()
 
-                    # Etapa 1: Processamento com Gemini (0% -> 40%)
-                    status_text.text("🔄 Convertendo PDF para análise...")
-                    progress_bar.progress(10)
+                # Etapa 1: Processamento com Gemini (0% -> 40%)
+                status_text.text("🔄 Convertendo PDF para análise...")
+                progress_bar.progress(10)
 
-                    status_text.text("🤖 Analisando PDF com Gemini AI...")
-                    progress_bar.progress(20)
+                status_text.text("🤖 Analisando PDF com Gemini AI...")
+                progress_bar.progress(20)
 
                 # Processa com Gemini
                 notas_fiscais = processar_pdf_com_gemini(pdf_bytes, uploaded_file.name)
 
-                with col_direita:
-                    progress_bar.progress(40)
+                progress_bar.progress(40)
 
                 if notas_fiscais and 'erro' in notas_fiscais[0]:
-                    with col_direita:
-                        progress_bar.empty()
-                        status_text.empty()
-                        st.error(f"❌ Erro: {notas_fiscais[0]['erro']}")
+                    progress_bar.empty()
+                    status_text.empty()
+                    st.error(f"❌ Erro: {notas_fiscais[0]['erro']}")
                 else:
-                    with col_direita:
-                        status_text.text("✅ Análise do Gemini concluída!")
-                        progress_bar.progress(50)
+                    status_text.text("✅ Análise do Gemini concluída!")
+                    progress_bar.progress(50)
 
                     # Consulta BigQuery
                     registros_bigquery = []
                     if bigquery_client:
-                        with col_direita:
-                            status_text.text("🗄️ Consultando BigQuery...")
-                            progress_bar.progress(60)
+                        status_text.text("🗄️ Consultando BigQuery...")
+                        progress_bar.progress(60)
 
                         registros_bigquery = consultar_bigquery_por_arquivo(uploaded_file.name)
 
-                        with col_direita:
-                            status_text.text("✅ Consulta ao BigQuery concluída!")
-                            progress_bar.progress(70)
+                        status_text.text("✅ Consulta ao BigQuery concluída!")
+                        progress_bar.progress(70)
                     else:
-                        with col_direita:
-                            progress_bar.progress(70)
+                        progress_bar.progress(70)
 
                     # Processa e valida cada nota fiscal
-                    with col_direita:
-                        status_text.text("🔍 Validando notas fiscais...")
-                        progress_bar.progress(80)
+                    status_text.text("🔍 Validando notas fiscais...")
+                    progress_bar.progress(80)
 
                     resultados = []
                     total_notas = len(notas_fiscais)
@@ -493,9 +483,8 @@ def main():
                     for idx, nota in enumerate(notas_fiscais, 1):
                         # Atualiza progresso durante validação
                         progresso_validacao = 80 + int((idx / total_notas) * 15)
-                        with col_direita:
-                            status_text.text(f"🔍 Validando nota fiscal {idx}/{total_notas}...")
-                            progress_bar.progress(progresso_validacao)
+                        status_text.text(f"🔍 Validando nota fiscal {idx}/{total_notas}...")
+                        progress_bar.progress(progresso_validacao)
 
                         # Remove zeros à esquerda do número da NF extraído pelo Gemini
                         if 'numero_nf' in nota and nota['numero_nf']:
@@ -529,182 +518,199 @@ def main():
                         resultados.append(nota)
 
                     # Finaliza progresso
-                    with col_direita:
-                        progress_bar.progress(100)
-                        status_text.text("✅ Processamento concluído!")
-                        time.sleep(0.5)
-                        progress_bar.empty()
-                        status_text.empty()
+                    progress_bar.progress(100)
+                    status_text.text("✅ Processamento concluído!")
+                    time.sleep(0.5)
+                    progress_bar.empty()
+                    status_text.empty()
 
-                    # Exibe resultados na coluna direita
-                    with col_direita:
-                        # Informações Analisadas (direto, sem seção de processamento)
-                        st.subheader("📋 Informações Analisadas")
+                    # Salva resultados no session_state
+                    st.session_state.resultados = resultados
+                    st.session_state.pdf_bytes = pdf_bytes
+                    st.session_state.nome_arquivo = uploaded_file.name
+                    st.session_state.num_paginas = num_paginas
+                    st.session_state.analise_concluida = True
 
-                        # Prepara dados para a tabela
-                        dados_tabela = []
-                        for resultado in resultados:
-                            dados_tabela.append({
-                                'Pág': resultado.get('numero_pagina', 'N/A'),
-                                'Tipo': resultado.get('tipo_documento', 'N/A'),
-                                'Nº NF': resultado.get('numero_nf', 'N/A'),
-                                'CNPJ Prestador': resultado.get('cnpj_prestador', 'N/A'),
-                                'Valor Total NF': formatar_valor_monetario(resultado.get('valor_total', 'N/A')),
-                                'Classificação': resultado.get('classificacao_final', 'N/A')
-                            })
+                    # Recarrega a página para exibir resultados
+                    st.rerun()
 
-                        # Cria DataFrame
-                        df_resumo = pd.DataFrame(dados_tabela)
+    # Se análise foi concluída, exibe as duas colunas com PDF e resultados
+    if st.session_state.analise_concluida and st.session_state.resultados:
+        # Cria layout de duas colunas
+        col_esquerda, col_direita = st.columns([1, 1])
 
-                        # Função para colorir a classificação
-                        def colorir_classificacao(val):
-                            if val == 'Descartado':
-                                return 'background-color: #d4edda; color: #155724; font-weight: bold'
-                            elif val == 'Suspeito':
-                                return 'background-color: #f8d7da; color: #721c24; font-weight: bold'
-                            else:
-                                return 'background-color: #fff3cd; color: #856404; font-weight: bold'
+        with col_esquerda:
+            st.header(" Visualização")
 
-                        # Aplica estilo
-                        df_estilizado = df_resumo.style.applymap(
-                            colorir_classificacao,
-                            subset=['Classificação']
-                        ).set_properties(**{
-                            'text-align': 'left',
-                            'font-size': '14px',
-                            'border': '1px solid #ddd'
-                        }).set_table_styles([
-                            {'selector': 'th',
-                             'props': [('background-color', '#1f77b4'),
-                                      ('color', 'white'),
-                                      ('font-weight', 'bold'),
-                                      ('text-align', 'left'),
-                                      ('padding', '12px 8px'),
-                                      ('border', '1px solid #ddd')]},
-                            {'selector': 'td',
-                             'props': [('padding', '12px 8px'),
-                                      ('border', '1px solid #ddd')]},
-                            {'selector': 'tr:nth-of-type(even)',
-                             'props': [('background-color', '#f3f3f3')]},
-                            {'selector': 'tr:hover',
-                             'props': [('background-color', '#e8f4f8')]}
-                        ])
+            # Visualiza o PDF usando iframe
+            pdf_base64 = base64.b64encode(st.session_state.pdf_bytes).decode('utf-8')
+            pdf_display = f'<iframe src="data:application/pdf;base64,{pdf_base64}" width="100%" height="800" type="application/pdf"></iframe>'
+            st.markdown(pdf_display, unsafe_allow_html=True)
 
-                        # Exibe a tabela estilizada
-                        st.dataframe(df_estilizado, use_container_width=True, hide_index=True)
+        with col_direita:
+            st.header("🔍 Análise")
 
-                        # Dropdowns com detalhes de cada nota
-                        st.markdown("---")
-                        st.markdown("### 🔍 Detalhes das Notas Fiscais")
+            # Exibe informações do arquivo
+            tamanho_mb = len(st.session_state.pdf_bytes) / (1024 * 1024)
+            st.markdown(f"""
+                <table style="width:100%; border-collapse: collapse; border:none;">
+                    <tr>
+                        <td style="padding: 4px;"><strong>📄 Arquivo:</strong> {st.session_state.nome_arquivo}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 4px;"><strong>📊 Tamanho:</strong> {tamanho_mb:.2f} MB</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 4px;"><strong>📑 Páginas:</strong> {st.session_state.num_paginas}</td>
+                    </tr>
+                </table>
+            """, unsafe_allow_html=True)
+            for idx, resultado in enumerate(st.session_state.resultados, 1):
+                # Prepara a badge de classificação
+                classificacao = resultado.get('classificacao_final', 'N/A')
+                if classificacao == 'Descartado':
+                    badge_color = '#d4edda'
+                    badge_text_color = '#155724'
+                    icon = '✅'
+                elif classificacao == 'Suspeito':
+                    badge_color = '#fff3cd'
+                    badge_text_color = '#856404'
+                    icon = '⚠️'
+                else:
+                    badge_color = '#fff3cd'
+                    badge_text_color = '#856404'
+                    icon = '❓'
 
-                        for idx, resultado in enumerate(resultados, 1):
-                            with st.expander(f"📋 Detalhes - Nota Fiscal #{idx} (Pág {resultado.get('numero_pagina', 'N/A')})", expanded=False):
+                # Card com tabela de informações
+                tipo_doc = resultado.get('tipo_documento', 'N/A')
+                numero_nf = resultado.get('numero_nf', 'N/A')
+                cnpj = resultado.get('cnpj_prestador', 'N/A')
+                valor_total = formatar_valor_monetario(resultado.get('valor_total', 'N/A'))
+                pagina = resultado.get('numero_pagina', 'N/A')
 
-                                # Classificação
-                                classificacao = resultado.get('classificacao_final', 'N/A')
-                                if classificacao == 'Descartado':
-                                    st.success(f"✅ **Classificação:** {classificacao}")
-                                elif classificacao == 'Suspeito':
-                                    st.error(f"⚠️ **Classificação:** {classificacao}")
-                                else:
-                                    st.warning(f"❓ **Classificação:** {classificacao}")
+                # Prepara análise detalhada
+                pdf_possui_nf = resultado.get('pdf_possui_nf_em_despesas', 'N/A')
+                valor_pago_menor_igual = resultado.get('valor_pago_menor_igual_declarado', 'N/A')
+                valor_nf_igual = resultado.get('valor_nf_igual_declarado', 'N/A')
 
-                                st.divider()
+                # Define ícones e textos baseados nas validações
+                if pdf_possui_nf == 'SIM':
+                    icon_existe = '✅'
+                    texto_existe = 'Sim, nota encontrada nas despesas declaradas.'
+                elif pdf_possui_nf == 'NÃO':
+                    icon_existe = '❌'
+                    texto_existe = 'Não, nota não consta nas despesas declaradas.'
+                else:
+                    icon_existe = '❓'
+                    texto_existe = 'Não foi possível verificar.'
 
-                                # Informações extraídas do PDF
-                                st.markdown("**📄 Dados Extraídos (Gemini)**")
-                                col1, col2 = st.columns(2)
-                                with col1:
-                                    st.write(f"**Página:** {resultado.get('numero_pagina', 'N/A')}")
-                                    st.write(f"**Tipo de Documento:** {resultado.get('tipo_documento', 'N/A')}")
-                                    st.write(f"**CNPJ Prestador:** {resultado.get('cnpj_prestador', 'N/A')}")
-                                with col2:
-                                    st.write(f"**Número da NF:** {resultado.get('numero_nf', 'N/A')}")
-                                    st.write(f"**Valor Total:** {formatar_valor_monetario(resultado.get('valor_total', 'N/A'))}")
+                if valor_pago_menor_igual == 'SIM':
+                    icon_valor_pago = '✅'
+                    texto_valor_pago = 'Sim'
+                elif valor_pago_menor_igual == 'NÃO':
+                    icon_valor_pago = '❌'
+                    texto_valor_pago = 'Não'
+                else:
+                    icon_valor_pago = '❓'
+                    texto_valor_pago = 'Não é possível verificar (nota não encontrada).' if pdf_possui_nf == 'NÃO' else 'Não foi possível verificar.'
 
-                                st.divider()
+                if valor_nf_igual == 'SIM':
+                    icon_valor_nf = '✅'
+                    texto_valor_nf = 'Sim'
+                elif valor_nf_igual == 'NÃO':
+                    icon_valor_nf = '❌'
+                    texto_valor_nf = 'Não'
+                else:
+                    icon_valor_nf = '❓'
+                    texto_valor_nf = 'Não é possível verificar (nota não encontrada).' if pdf_possui_nf == 'NÃO' else 'Não foi possível verificar.'
 
-                                # Dados do BigQuery
-                                if bigquery_client:
-                                    st.markdown("**🗄️ Dados do BigQuery**")
+                # Usa container com estilo de card
+                with st.container(border=True):
+                    # Aplica estilo de card ao container
+                    st.markdown(f"""
+                    <style>
+                        div[data-testid="stVerticalBlock"] > div:has(> div.nota-fiscal-card-{idx}) {{
+                            border: 1px solid #ddd;
+                            border-radius: 8px;
+                            padding: 16px;
+                            margin-bottom: 16px;
+                            background-color: #ffffff;
+                        }}
+                    </style>
+                    <div class="nota-fiscal-card-{idx}">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                            <h5 style="margin: 0;">{tipo_doc} - {numero_nf}</h5>
+                            <div style="background-color: {badge_color}; color: {badge_text_color}; padding: 6px 12px; border-radius: 6px; font-weight: bold;">
+                                {icon} {classificacao}
+                            </div>
+                        </div>
+                        <table style="width:100%; border-collapse: collapse; border:none; margin-bottom: 16px;">
+                            <tr>
+                                <td style="padding: 8px; font-weight: bold;">CNPJ Prestador:</td>
+                                <td colspan="3" style="padding: 8px;">{cnpj}</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 8px; font-weight: bold;">Valor Total:</td>
+                                <td style="padding: 8px;">{valor_total}</td>
+                                <td style="padding: 8px; font-weight: bold;">Página:</td>
+                                <td style="padding: 8px;">{pagina}</td>
+                            </tr>
+                        </table>
+                    </div>
+                    """, unsafe_allow_html=True)
 
-                                    # Indica se houve matching
-                                    num_nf_gemini = str(resultado.get('numero_nf', '')).strip()
-                                    num_doc_bq = str(resultado.get('num_documento_bq', '')).strip()
+                    # Expander com análise final dentro do container
+                    with st.expander("📊 Ver Análise Detalhada"):
+                        st.markdown(f"""
+                        {icon_existe} **1. Existe no OSINFO?** {texto_existe}
 
-                                    if num_doc_bq != 'N/A':
-                                        if num_nf_gemini == num_doc_bq:
-                                            st.info("🎯 Matching encontrado")
-                                        else:
-                                            st.warning("⚠️ Sem matching exato")
+                        {icon_valor_pago} **2. Valor Pago ≤ Declarado?** {texto_valor_pago}
 
-                                    col1, col2 = st.columns(2)
-                                    with col1:
-                                        st.write(f"**Num Documento:** {resultado.get('num_documento_bq', 'N/A')}")
-                                        st.write(f"**Valor Documento:** {formatar_valor_monetario(resultado.get('valor_documento_bq', 'N/A'))}")
-                                    with col2:
-                                        st.write(f"**Valor Pago Total:** {formatar_valor_monetario(resultado.get('valor_pago_total_bq', 'N/A'))}")
+                        {icon_valor_nf} **3. Valor da Nota Fiscal é igual ao Valor Declarado?** {texto_valor_nf}
+                        """)
 
-                                    st.divider()
+            # Exportar para Excel
+            st.markdown("---")
 
-                                    # Validações
-                                    st.markdown("**✅ Validações**")
+            # Prepara dados para DataFrame
+            dados_exportar = []
+            for resultado in st.session_state.resultados:
+                dados_exportar.append({
+                    'Nome do Arquivo': st.session_state.nome_arquivo,
+                    'Total de Páginas': st.session_state.num_paginas,
+                    'Número da Página': resultado.get('numero_pagina', 'N/A'),
+                    'CNPJ Prestador': resultado.get('cnpj_prestador', 'N/A'),
+                    'Tipo de Documento': resultado.get('tipo_documento', 'N/A'),
+                    'Número da NF': resultado.get('numero_nf', 'N/A'),
+                    'Valor Total da NF': formatar_valor_monetario(resultado.get('valor_total', 'N/A')),
+                    'Num Documento (BQ)': resultado.get('num_documento_bq', 'N/A'),
+                    'Valor Documento (BQ)': formatar_valor_monetario(resultado.get('valor_documento_bq', 'N/A')),
+                    'Valor Pago Total (BQ)': formatar_valor_monetario(resultado.get('valor_pago_total_bq', 'N/A')),
+                    'PDF possui NF em Despesas?': resultado.get('pdf_possui_nf_em_despesas', 'N/A'),
+                    'Valor Pago <= Valor Declarado?': resultado.get('valor_pago_menor_igual_declarado', 'N/A'),
+                    'Valor NF == Valor Declarado?': resultado.get('valor_nf_igual_declarado', 'N/A'),
+                    'Classificação Final': resultado.get('classificacao_final', 'N/A')
+                })
 
-                                    validacao1 = resultado.get('pdf_possui_nf_em_despesas', 'N/A')
-                                    icon1 = "✅" if validacao1 == "SIM" else "❌" if validacao1 == "NÃO" else "❓"
-                                    st.write(f"{icon1} **NF em Despesas:** {validacao1}")
+            df = pd.DataFrame(dados_exportar)
 
-                                    validacao2 = resultado.get('valor_pago_menor_igual_declarado', 'N/A')
-                                    icon2 = "✅" if validacao2 == "SIM" else "❌" if validacao2 == "NÃO" else "❓"
-                                    st.write(f"{icon2} **Valor Pago ≤ Declarado:** {validacao2}")
+            # Gera Excel em memória
+            output = BytesIO()
+            with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                df.to_excel(writer, index=False, sheet_name='Análise')
+            output.seek(0)
 
-                                    validacao3 = resultado.get('valor_nf_igual_declarado', 'N/A')
-                                    icon3 = "✅" if validacao3 == "SIM" else "❌" if validacao3 == "NÃO" else "❓"
-                                    st.write(f"{icon3} **Valor NF = Declarado:** {validacao3}")
+            # Botão de download
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            nome_arquivo_excel = f"analise_nf_{timestamp}.xlsx"
 
-                        # Exportar para Excel
-                        st.divider()
-                        st.subheader("📥 Exportar Resultados")
-
-                        # Prepara dados para DataFrame
-                        dados_exportar = []
-                        for resultado in resultados:
-                            dados_exportar.append({
-                                'Nome do Arquivo': uploaded_file.name,
-                                'Total de Páginas': num_paginas,
-                                'Número da Página': resultado.get('numero_pagina', 'N/A'),
-                                'CNPJ Prestador': resultado.get('cnpj_prestador', 'N/A'),
-                                'Tipo de Documento': resultado.get('tipo_documento', 'N/A'),
-                                'Número da NF': resultado.get('numero_nf', 'N/A'),
-                                'Valor Total da NF': formatar_valor_monetario(resultado.get('valor_total', 'N/A')),
-                                'Num Documento (BQ)': resultado.get('num_documento_bq', 'N/A'),
-                                'Valor Documento (BQ)': formatar_valor_monetario(resultado.get('valor_documento_bq', 'N/A')),
-                                'Valor Pago Total (BQ)': formatar_valor_monetario(resultado.get('valor_pago_total_bq', 'N/A')),
-                                'PDF possui NF em Despesas?': resultado.get('pdf_possui_nf_em_despesas', 'N/A'),
-                                'Valor Pago <= Valor Declarado?': resultado.get('valor_pago_menor_igual_declarado', 'N/A'),
-                                'Valor NF == Valor Declarado?': resultado.get('valor_nf_igual_declarado', 'N/A'),
-                                'Classificação Final': resultado.get('classificacao_final', 'N/A')
-                            })
-
-                        df = pd.DataFrame(dados_exportar)
-
-                        # Gera Excel em memória
-                        output = BytesIO()
-                        with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                            df.to_excel(writer, index=False, sheet_name='Análise')
-                        output.seek(0)
-
-                        # Botão de download
-                        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                        nome_arquivo_excel = f"analise_nf_{timestamp}.xlsx"
-
-                        st.download_button(
-                            label="📥 Download Excel",
-                            data=output,
-                            file_name=nome_arquivo_excel,
-                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                            use_container_width=True
-                        )
+            st.download_button(
+                label="📥 Download Excel",
+                data=output,
+                file_name=nome_arquivo_excel,
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True
+            )
 
 
 if __name__ == "__main__":
