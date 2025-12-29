@@ -18,6 +18,7 @@ import PyPDF2
 import pandas as pd
 from datetime import datetime
 from io import BytesIO
+from streamlit_pdf_viewer import pdf_viewer
 
 from config import (
     LIMITE_TAMANHO_PDF_MB,
@@ -442,9 +443,22 @@ def main():
 
     # Se análise não foi concluída, mostra upload e botão de análise
     if not st.session_state.analise_concluida:
+        st.markdown("### 📤 Validação de Documentos")
+
+        st.info("""
+**📌 Tipos de documentos aceitos para análise**
+
+Neste momento, o sistema realiza a conferência automática dos seguintes documentos:
+* **Nota Fiscal de Serviços / Produto**
+* **DANFE**
+* **Faturas de Concessionárias** (Light, CEG, Rio Águas)
+
+*Qualquer outro tipo de documento será classificado como 'Não foi possível analisar'.*
+        """)
+
         # Upload do arquivo
         uploaded_file = st.file_uploader(
-            "📎 Faça upload de uma Prestação de Contas para validar as Notas Fiscais",
+            label="Envie o PDF da sua prestação de contas abaixo para iniciar a conferência automática das Notas Fiscais",
             type=['pdf'],
             help=f"Tamanho máximo: {LIMITE_TAMANHO_PDF_MB} MB"
         )
@@ -456,7 +470,7 @@ def main():
             num_paginas = contar_paginas_pdf(pdf_bytes)
 
             # Botão de processar
-            processar = st.button("🚀 Analisar PDF", type="primary", use_container_width=False)
+            processar = st.button("🚀 Analisar PDF", type="primary")
 
             if processar:
                 # Cria barra de progresso e status
@@ -569,27 +583,10 @@ def main():
         with col_esquerda:
             st.header(" Visualização")
 
-            # Verifica o tamanho do PDF (limite de ~4MB para data: URL)
-            tamanho_pdf_mb = len(st.session_state.pdf_bytes) / (1024 * 1024)
-            LIMITE_VISUALIZACAO_MB = 4.0
-
-            if tamanho_pdf_mb <= LIMITE_VISUALIZACAO_MB:
-                # Visualiza o PDF usando iframe
-                pdf_base64 = base64.b64encode(st.session_state.pdf_bytes).decode('utf-8')
-                pdf_display = f'<iframe src="data:application/pdf;base64,{pdf_base64}" width="100%" height="800" type="application/pdf"></iframe>'
-                st.markdown(pdf_display, unsafe_allow_html=True)
-            else:
-                # PDF muito grande - oferece download
-                st.warning(f"⚠️ O PDF ({tamanho_pdf_mb:.2f} MB) é muito grande para visualização direta no navegador.")
-                st.info("💡 Use o botão abaixo para baixar e visualizar o arquivo localmente.")
-
-                st.download_button(
-                    label="📥 Baixar PDF",
-                    data=st.session_state.pdf_bytes,
-                    file_name=st.session_state.nome_arquivo,
-                    mime="application/pdf",
-                    use_container_width=True
-                )
+            # Container com borda para o visualizador de PDF
+            with st.container(border=True):
+                # Visualiza o PDF usando streamlit-pdf-viewer (muito mais eficiente para PDFs grandes)
+                pdf_viewer(st.session_state.pdf_bytes, height=800)
 
         with col_direita:
             st.header("🔍 Análise")
