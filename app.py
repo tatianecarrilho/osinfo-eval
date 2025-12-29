@@ -383,9 +383,32 @@ def main():
     # Configuração da página
     st.set_page_config(
         page_title="OSINFO - Prestação de Contas",
-        page_icon="📄",
+        page_icon="",
         layout="wide"
     )
+
+    # Logo
+    st.logo("img/iplan_vertical_azul.png", size="large")
+
+    # CSS customizado para botão primário azul
+    st.markdown("""
+        <style>
+        /* Botão primário azul */
+        .stButton > button[kind="primary"] {
+            background-color: #1E40AF;
+            color: white;
+            border: none;
+        }
+        .stButton > button[kind="primary"]:hover {
+            background-color: #1E3A8A;
+            border: none;
+        }
+        .stButton > button[kind="primary"]:active {
+            background-color: #1E3A8A;
+            border: none;
+        }
+        </style>
+    """, unsafe_allow_html=True)
 
     # Título e descrição
     st.title("📄 OSINFO - Prestação de Contas")
@@ -463,12 +486,12 @@ def main():
                     # Consulta BigQuery
                     registros_bigquery = []
                     if bigquery_client:
-                        status_text.text("🗄️ Consultando BigQuery...")
+                        status_text.text("🗄️ Consultando OSINFO...")
                         progress_bar.progress(60)
 
                         registros_bigquery = consultar_bigquery_por_arquivo(uploaded_file.name)
 
-                        status_text.text("✅ Consulta ao BigQuery concluída!")
+                        status_text.text("✅ Consulta ao OSINFO concluída!")
                         progress_bar.progress(70)
                     else:
                         progress_bar.progress(70)
@@ -505,8 +528,11 @@ def main():
 
                             if registro_matching:
                                 nota.update(registro_matching)
-                            elif registros_bigquery:
-                                nota.update(registros_bigquery[0])
+                            else:
+                                # Não encontrou match - marca como N/A
+                                nota['num_documento_bq'] = 'N/A'
+                                nota['valor_documento_bq'] = 'N/A'
+                                nota['valor_pago_total_bq'] = 'N/A'
                         else:
                             nota['num_documento_bq'] = 'N/A'
                             nota['valor_documento_bq'] = 'N/A'
@@ -529,6 +555,7 @@ def main():
                     st.session_state.pdf_bytes = pdf_bytes
                     st.session_state.nome_arquivo = uploaded_file.name
                     st.session_state.num_paginas = num_paginas
+                    st.session_state.registros_bigquery = registros_bigquery
                     st.session_state.analise_concluida = True
 
                     # Recarrega a página para exibir resultados
@@ -542,10 +569,27 @@ def main():
         with col_esquerda:
             st.header(" Visualização")
 
-            # Visualiza o PDF usando iframe
-            pdf_base64 = base64.b64encode(st.session_state.pdf_bytes).decode('utf-8')
-            pdf_display = f'<iframe src="data:application/pdf;base64,{pdf_base64}" width="100%" height="800" type="application/pdf"></iframe>'
-            st.markdown(pdf_display, unsafe_allow_html=True)
+            # Verifica o tamanho do PDF (limite de ~4MB para data: URL)
+            tamanho_pdf_mb = len(st.session_state.pdf_bytes) / (1024 * 1024)
+            LIMITE_VISUALIZACAO_MB = 4.0
+
+            if tamanho_pdf_mb <= LIMITE_VISUALIZACAO_MB:
+                # Visualiza o PDF usando iframe
+                pdf_base64 = base64.b64encode(st.session_state.pdf_bytes).decode('utf-8')
+                pdf_display = f'<iframe src="data:application/pdf;base64,{pdf_base64}" width="100%" height="800" type="application/pdf"></iframe>'
+                st.markdown(pdf_display, unsafe_allow_html=True)
+            else:
+                # PDF muito grande - oferece download
+                st.warning(f"⚠️ O PDF ({tamanho_pdf_mb:.2f} MB) é muito grande para visualização direta no navegador.")
+                st.info("💡 Use o botão abaixo para baixar e visualizar o arquivo localmente.")
+
+                st.download_button(
+                    label="📥 Baixar PDF",
+                    data=st.session_state.pdf_bytes,
+                    file_name=st.session_state.nome_arquivo,
+                    mime="application/pdf",
+                    use_container_width=True
+                )
 
         with col_direita:
             st.header("🔍 Análise")
@@ -553,15 +597,16 @@ def main():
             # Exibe informações do arquivo
             tamanho_mb = len(st.session_state.pdf_bytes) / (1024 * 1024)
             st.markdown(f"""
-                <table style="width:100%; border-collapse: collapse; border:none;">
-                    <tr>
-                        <td style="padding: 4px;"><strong>📄 Arquivo:</strong> {st.session_state.nome_arquivo}</td>
+                <table style="width:100%; border:none;">
+                    <tr style="border:none">
+                        <td style="padding: 4px; border:none;"><strong>Arquivo</strong></td>
+                        <td style="padding: 4px; border:none;"><strong>Tamanho</strong></td>
+                        <td style="padding: 4px; border:none;"><strong>Páginas</strong></td>
                     </tr>
-                    <tr>
-                        <td style="padding: 4px;"><strong>📊 Tamanho:</strong> {tamanho_mb:.2f} MB</td>
-                    </tr>
-                    <tr>
-                        <td style="padding: 4px;"><strong>📑 Páginas:</strong> {st.session_state.num_paginas}</td>
+                    <tr style="border:none">
+                        <td style="padding: 4px; border:none;">{st.session_state.nome_arquivo}</td>
+                        <td style="padding: 4px; border:none;">{tamanho_mb:.2f} MB</td>
+                        <td style="padding: 4px; border:none;">{st.session_state.num_paginas}</td>
                     </tr>
                 </table>
             """, unsafe_allow_html=True)
@@ -611,7 +656,7 @@ def main():
                     icon_valor_pago = '❌'
                     texto_valor_pago = 'Não'
                 else:
-                    icon_valor_pago = '❓'
+                    icon_valor_pago = '❌'
                     texto_valor_pago = 'Não é possível verificar (nota não encontrada).' if pdf_possui_nf == 'NÃO' else 'Não foi possível verificar.'
 
                 if valor_nf_igual == 'SIM':
@@ -621,7 +666,7 @@ def main():
                     icon_valor_nf = '❌'
                     texto_valor_nf = 'Não'
                 else:
-                    icon_valor_nf = '❓'
+                    icon_valor_nf = '❌'
                     texto_valor_nf = 'Não é possível verificar (nota não encontrada).' if pdf_possui_nf == 'NÃO' else 'Não foi possível verificar.'
 
                 # Usa container com estilo de card
@@ -660,7 +705,7 @@ def main():
                     """, unsafe_allow_html=True)
 
                     # Expander com análise final dentro do container
-                    with st.expander("📊 Ver Análise Detalhada"):
+                    with st.expander("📊 Análise Detalhada"):
                         st.markdown(f"""
                         {icon_existe} **1. Existe no OSINFO?** {texto_existe}
 
@@ -668,6 +713,61 @@ def main():
 
                         {icon_valor_nf} **3. Valor da Nota Fiscal é igual ao Valor Declarado?** {texto_valor_nf}
                         """)
+
+                        # Se encontrou a nota no BigQuery, exibe tabela com os dados
+                        if pdf_possui_nf == 'SIM':
+                            st.markdown("**Dados encontrados no OSINFO:**")
+
+                            # Prepara dados para a tabela
+                            dados_bq = {
+                                'Campo': [
+                                    'Número do Documento',
+                                    'Valor Documento Declarado',
+                                    'Valor Pago Total'
+                                ],
+                                'Valor': [
+                                    resultado.get('num_documento_bq', 'N/A'),
+                                    formatar_valor_monetario(resultado.get('valor_documento_bq', 'N/A')),
+                                    formatar_valor_monetario(resultado.get('valor_pago_total_bq', 'N/A'))
+                                ]
+                            }
+
+                            df_bq = pd.DataFrame(dados_bq)
+                            st.table(df_bq)
+
+            # Container separado para exibir outras despesas do BigQuery (quando houver registros mas sem match)
+            if 'registros_bigquery' in st.session_state and st.session_state.registros_bigquery:
+                # Coleta TODOS os números de notas fiscais extraídos do PDF (independente se deram match ou não)
+                numeros_nf_no_pdf = set()
+                for resultado in st.session_state.resultados:
+                    if 'erro' not in resultado:
+                        numero_nf = str(resultado.get('numero_nf', '')).strip()
+                        if numero_nf and numero_nf != 'N/A' and numero_nf != '':
+                            numeros_nf_no_pdf.add(numero_nf)
+
+                # Filtra apenas os registros do BigQuery que NÃO correspondem a nenhuma nota fiscal do PDF
+                dados_outras_despesas = []
+                for reg in st.session_state.registros_bigquery:
+                    num_doc_bq = str(reg.get('num_documento_bq', '')).strip()
+
+                    # Inclui se:
+                    # 1. O número do documento é NULL/vazio/N/A (não pode ter match)
+                    # 2. OU se o número do documento NÃO está na lista de notas do PDF
+                    if not num_doc_bq or num_doc_bq == 'N/A' or num_doc_bq not in numeros_nf_no_pdf:
+                        dados_outras_despesas.append({
+                            'Número Documento': reg.get('num_documento_bq', 'N/A') if reg.get('num_documento_bq') else 'N/A',
+                            'Valor Documento': formatar_valor_monetario(reg.get('valor_documento_bq', 'N/A')),
+                            'Valor Pago Total': formatar_valor_monetario(reg.get('valor_pago_total_bq', 'N/A'))
+                        })
+
+                # Só exibe o container se houver despesas não encontradas no PDF
+                if dados_outras_despesas:
+                    with st.container(border=True):
+                        st.markdown("### 📋 Outras despesas encontradas no OSINFO")
+                        st.markdown("As seguintes despesas foram encontradas para este arquivo, mas não deram match com as notas fiscais extraídas:")
+
+                        df_outras_despesas = pd.DataFrame(dados_outras_despesas)
+                        st.dataframe(df_outras_despesas, use_container_width=True, hide_index=True)
 
             # Exportar para Excel
             st.markdown("---")
@@ -709,7 +809,7 @@ def main():
                 data=output,
                 file_name=nome_arquivo_excel,
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True
+                use_container_width=False
             )
 
 
